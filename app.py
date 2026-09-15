@@ -1,6 +1,8 @@
 import streamlit as st
 import pandas as pd
+import io
 from sqlalchemy import create_engine
+from mapeo_tiendas import obtener_codigo_tienda
 
 # ==========================================
 # CONFIGURACIÓN DE PÁGINA
@@ -11,7 +13,6 @@ st.set_page_config(page_title="Pedidos Ya", layout="centered")
 # CONFIGURACIÓN DE BASE DE DATOS (Segura)
 # ==========================================
 try:
-    # Intenta leer las credenciales guardadas en Streamlit Cloud
     secrets = st.secrets["db"]
     DB_CONFIG = {
         "server": secrets["server"],
@@ -21,7 +22,6 @@ try:
         "driver": secrets["driver"]
     }
 except:
-    # Modo local (si no hay secrets configurados)
     DB_CONFIG = {
         "server": "minerva.fridaysperu.com",
         "database": "DW_Simphony_Prod",
@@ -54,7 +54,6 @@ def validar_archivo_sin_duplicados(xls, engine=None):
             df = pd.read_excel(xls, sheet_name=hoja)
             df.columns = df.columns.str.strip()
             
-            # 1. Validar duplicados INTERNOS en el Excel
             if isinstance(col_id, list):
                 cols_existentes = [c for c in col_id if c in df.columns]
                 if len(cols_existentes) == len(col_id):
@@ -71,7 +70,6 @@ def validar_archivo_sin_duplicados(xls, engine=None):
                 errores.append(f"Hoja '{hoja}': Se detectaron registros duplicados internamente")
                 continue
             
-            # 2. Si hay conexión a BD, validar contra base de datos
             if engine is not None:
                 try:
                     if tabla == "pedidos_reclamos":
@@ -83,7 +81,6 @@ def validar_archivo_sin_duplicados(xls, engine=None):
                         
                         existentes = df[df['llave'].isin(df_bd['llave'])]
                         nuevos = df[~df['llave'].isin(df_bd['llave'])]
-                        
                         df = df.drop(columns=['llave'])
                     else:
                         query = f"SELECT [Número de pedido] FROM dbo.{tabla}"
@@ -96,7 +93,6 @@ def validar_archivo_sin_duplicados(xls, engine=None):
                         advertencias.append(f"'{hoja}': {len(existentes)} registros ya existen en la base de datos (se omitirán)")
                     
                     dataframes[tabla] = nuevos
-                    
                 except Exception as e:
                     dataframes[tabla] = df
             else:
@@ -112,7 +108,6 @@ def validar_archivo_sin_duplicados(xls, engine=None):
 # ==========================================
 def cargar_a_bd(dataframes, engine):
     resultados = {}
-    
     for nombre_tabla, df in dataframes.items():
         if df.empty:
             resultados[nombre_tabla] = {"status": "warning", "msg": "No hay registros nuevos para procesar"}
@@ -137,7 +132,6 @@ def cargar_a_bd(dataframes, engine):
             if total_nuevos > 0:
                 with engine.begin() as conn:
                     df_nuevos.to_sql(nombre_tabla, con=conn, if_exists='append', index=False, method='multi')
-                
                 resultados[nombre_tabla] = {"status": "success", "nuevos": total_nuevos}
             else:
                 resultados[nombre_tabla] = {"status": "warning", "msg": "Todos los registros ya se encuentran en la base de datos"}
@@ -146,6 +140,47 @@ def cargar_a_bd(dataframes, engine):
             resultados[nombre_tabla] = {"status": "error", "msg": str(e)}
     
     return resultados
+
+# ==========================================
+# GENERAR TABLA DINÁMICA DE RESUMEN
+# ==========================================
+def generar_tabla_dinamica(dataframes):
+    df_objetivo = None
+    for nombre_tabla, df in dataframes.items():
+        if "Nombre de la tienda" in df.columns:
+            df_objetivo = df.copy()
+            break
+    
+    if df_objetivo is None or df_objetivo.empty:
+        return None
+
+    df_objetivo['Código Tienda'] = df_objetivo['Nombre de la tienda'].apply(obtener_codigo_tienda)
+
+    columnas_a_sumar = [
+        "Ventas base por Uso y alquiler de plataforma Rappi (informativo)",
+        "Compensacion",
+        "Costo Cancelada",
+        "Uso y alquiler de plataforma Rappi",
+        "Valor Ajustes Manuales"
+    ]
+    
+    columnas_existentes = [col for col in columnas_a_sumar if col in df_objetivo.columns]
+
+    tabla = df_objetivo.groupby(['Código Tienda', 'Nombre de la tienda'])[columnas_existentes].sum().reset_index()
+
+    fila_total = tabla[columnas_existentes].sum()
+    fila_total['Código Tienda'] = 'TOTAL'
+    fila_total['Nombre de la tienda'] = 'GENERAL'
+    
+    cols_order = ['Código Tienda', 'Nombre de la tienda'] + columnas_existentes
+    fila_total = fila_total[cols_order]
+    
+    tabla = pd.concat([tabla, pd.DataFrame([fila_total])], ignore_index=True)
+
+    for col in columnas_existentes:
+        tabla[col] = tabla[col].round(2)
+
+    return tabla
 
 # ==========================================
 # INTERFAZ PRINCIPAL
@@ -187,14 +222,12 @@ def main():
                             st.warning(f"Validación completada con observaciones ({len(advertencias)} hojas con registros existentes):")
                             for msg in advertencias:
                                 st.markdown(f"- {msg}")
-                            
                             total_nuevos = sum(len(df) for df in dataframes.values()) if dataframes else 0
                             st.info(f"Total de registros nuevos a insertar: **{total_nuevos}**")
                         else:
                             st.success("Archivo válido. Todos los registros son nuevos.")
                             total_registros = sum(len(df) for df in dataframes.values()) if dataframes else 0
                             st.info(f"Total de registros a insertar: **{total_registros}**")
-                            
                     except Exception as e:
                         st.error(f"Error durante la validación: {e}")
         
@@ -212,7 +245,7 @@ def main():
                     st.error("No es posible cargar el archivo: se detectaron duplicados internos.")
                     st.stop()
                 
-                with st.spinner("Procesando carga de datos..."):
+                with st.spinner("Procesando carga de datos y generando resumen..."):
                     try:
                         dataframes = st.session_state.get('dataframes', {})
                         
@@ -234,6 +267,27 @@ def main():
                                 st.error(f"**{tabla}**: {resultado['msg']}")
                         
                         st.success("Proceso de carga finalizado correctamente.")
+                        
+                        # ==========================================
+                        # NUEVO: Generar y mostrar Tabla Dinámica
+                        # ==========================================
+                        tabla_resumen = generar_tabla_dinamica(dataframes)
+                        
+                        if tabla_resumen is not None:
+                            st.divider()
+                            st.subheader("📊 Tabla Dinámica de Resumen por Tienda")
+                            st.dataframe(tabla_resumen, use_container_width=True, hide_index=True)
+                            
+                            excel_buffer = io.BytesIO()
+                            with pd.ExcelWriter(excel_buffer, engine='openpyxl') as writer:
+                                tabla_resumen.to_excel(writer, index=False, sheet_name='Resumen')
+                            
+                            st.download_button(
+                                label="⬇️ Descargar Resumen en Excel",
+                                data=excel_buffer.getvalue(),
+                                file_name="resumen_notas_credito.xlsx",
+                                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                            )
                         
                         st.session_state.pop('validacion_ok', None)
                         st.session_state.pop('dataframes', None)
