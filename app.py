@@ -1,299 +1,243 @@
 import streamlit as st
 import pandas as pd
 import io
-from sqlalchemy import create_engine
-from mapeo_tiendas import obtener_codigo_tienda
+from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 
-# ==========================================
-# CONFIGURACIÓN DE PÁGINA
-# ==========================================
-st.set_page_config(page_title="Pedidos Ya", layout="centered")
+st.set_page_config(page_title="Carga Rappi - Asientos Contables", layout="centered")
+st.title("📊 Carga de Datos Rappi")
+st.markdown("Sube el archivo original de Rappi. El sistema generará el Excel con detalle, resumen y asiento contable.")
 
-# ==========================================
-# CONFIGURACIÓN DE BASE DE DATOS (Segura)
-# ==========================================
-try:
-    secrets = st.secrets["db"]
-    DB_CONFIG = {
-        "server": secrets["server"],
-        "database": secrets["database"],
-        "user": secrets["user"],
-        "password": secrets["password"],
-        "driver": secrets["driver"]
-    }
-except:
-    DB_CONFIG = {
-        "server": "minerva.fridaysperu.com",
-        "database": "DW_Simphony_Prod",
-        "user": "rrobles",
-        "password": "TU_CONTRASEÑA_AQUÍ",
-        "driver": "ODBC Driver 17 for SQL Server"
-    }
+uploaded_file = st.file_uploader("Seleccionar archivo Excel de Rappi", type=['xlsx', 'xls'])
 
-def get_engine():
-    conn_str = f"mssql+pyodbc://{DB_CONFIG['user']}:{DB_CONFIG['password']}@{DB_CONFIG['server']}/{DB_CONFIG['database']}?driver={DB_CONFIG['driver']}"
-    return create_engine(conn_str, fast_executemany=True)
+MAPEO_CODIGOS = {
+    "Fridays Comas": "0000000016",
+    "Fridays Mall del Sur": "0000000012",
+    "Fridays Óvalo Gutiérrez": "0000000001",
+    "Fridays Ovalo Gutierrez": "0000000001",
+    "Fridays Ovalo Monitor": "0000000019",
+    "Fridays Óvalo Monitor": "0000000019",
+    "Fridays Plaza Lima Norte": "0000000017",
+    "Fridays Primavera": "0000000009",
+    "Fridays Rambla": "0000000010",
+    "Fridays Salaverry": "0000000008",
+    "Fridays San Miguel": "0000000003",
+    "Fridays Santa Anita": "0000000015",
+    "Fridays DK La Molina": "0000000018",
+    "Fridays Dk La Molina": "0000000018",
+    "Fridays Puruchuco": "0000000014",
+    "Fridays San Juan de Lurigancho": "0000000020",
+    "Fridays Piura": "0000000024",
+    "Fridays - Real Plaza Arequipa": "0000000006",
+    "Fridays - Mall Aventura Porongoche": "0000000023",
+    "Fridays Mall Aventura Porongoche": "0000000023",
+    "Fridays El Polo": "0000000027",
+    "Smash Burger by Fridays Óvalo Gutiérrez": "0000000001",
+    "Smash Burger by Fridays Ovalo Gutierrez": "0000000001",
+    "Smash Burger by Fridays Ovalo Monitor": "0000000019",
+    "Smash Burger by Fridays Óvalo Monitor": "0000000019",
+    "Smash Burger by Fridays San Juan de Lurigancho": "0000000020",
+    "Smash Burger by Fridays Dk la Molina": "0000000018",
+    "Smash Burger by Fridays DK La Molina": "0000000018",
+    "Smash Burger by Fridays Santa Anita": "0000000015",
+    "Smash Burger by Fridays Piura": "0000000024",
+    "Smash Burger by Fridays Plaza Lima Norte": "0000000017",
+    "Smash Burger by Fridays San Miguel": "0000000003",
+    "Smash Burger By Fridays - Mall Aventura Porongoche": "0000000023",
+    "Smash Burger by Fridays Mall Aventura Porongoche": "0000000023",
+    "Smash Burger by Fridays Salaverry": "0000000008",
+    "Smash Burger by Fridays Mall del Sur": "0000000012",
+    "Smash Burger by Fridays Rambla": "0000000010",
+    "Smash Burger by Fridays Comas": "0000000016",
+    "Smash Burger by Fridays Puruchuco": "0000000014",
+    "Smash Burger by Fridays Arequipa": "0000000006",
+    "Smash Burger by Fridays Primavera": "0000000009",
+    "Smash Burger by Fridays El Polo": "0000000027",
+}
 
-# ==========================================
-# VALIDACIÓN DE DUPLICADOS (CONTRA ARCHIVO Y BD)
-# ==========================================
-def validar_archivo_sin_duplicados(xls, engine=None):
-    hojas_map = {
-        "Lista de ordenes": ("pedidos_lista", "Número de pedido"),
-        "Cargos por cancelaciones": ("pedidos_cancelaciones", "Número de pedido"),
-        "Cargos por reclamos": ("pedidos_reclamos", ["Número de pedido", "Razon", "Monto"]),
-        "Reintegros": ("pedidos_reintegros", "Número de pedido")
-    }
+def obtener_codigo_tienda(nombre_tienda):
+    if nombre_tienda in MAPEO_CODIGOS:
+        return MAPEO_CODIGOS[nombre_tienda]
+    nombre_normalizado = nombre_tienda.strip().lower()
+    for nombre_mapeado, codigo in MAPEO_CODIGOS.items():
+        if nombre_mapeado.lower() == nombre_normalizado:
+            return codigo
+    return ""
+
+def aplicar_formato_detalle(ws):
+    fill_header = PatternFill(start_color="F4B183", end_color="F4B183", fill_type="solid")
+    font_header = Font(name='Calibri', bold=True, size=11, color="000000")
+    font_normal = Font(name='Calibri', size=10)
+    thin_border = Border(left=Side(style='thin'), right=Side(style='thin'), top=Side(style='thin'), bottom=Side(style='thin'))
+    for cell in ws[1]:
+        cell.fill = fill_header
+        cell.font = font_header
+        cell.alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
+        cell.border = thin_border
+    for row in ws.iter_rows(min_row=2, max_row=ws.max_row, max_col=ws.max_column):
+        for cell in row:
+            cell.font = font_normal
+            cell.border = thin_border
+            cell.alignment = Alignment(vertical='center')
+            if cell.column > 5:
+                cell.number_format = '#,##0.00'
+                cell.alignment = Alignment(horizontal='right', vertical='center')
+    anchos = {'A': 22, 'B': 18, 'C': 35, 'D': 18, 'E': 20, 'F': 25, 'G': 18, 'H': 18, 'I': 25, 'J': 22}
+    for col, ancho in anchos.items():
+        ws.column_dimensions[col].width = ancho
+    ws.freeze_panes = 'A2'
+    ws.auto_filter.ref = ws.dimensions
+
+def aplicar_formato_resumen(ws):
+    fill_header = PatternFill(start_color="F4B183", end_color="F4B183", fill_type="solid")
+    fill_gral = PatternFill(start_color="92D050", end_color="92D050", fill_type="solid")
+    font_header = Font(name='Calibri', bold=True, size=11, color="000000")
+    font_normal = Font(name='Calibri', size=10)
+    font_total = Font(name='Calibri', bold=True, size=10)
+    thin_border = Border(left=Side(style='thin'), right=Side(style='thin'), top=Side(style='thin'), bottom=Side(style='thin'))
+    for cell in ws[1]:
+        cell.fill = fill_header
+        cell.font = font_header
+        cell.alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
+        cell.border = thin_border
+    max_row = ws.max_row
+    for row_idx in range(2, max_row + 1):
+        for cell in ws[row_idx]:
+            cell.font = font_normal
+            cell.border = thin_border
+            cell.alignment = Alignment(vertical='center')
+            if cell.column > 1:
+                cell.number_format = '#,##0.00'
+                cell.alignment = Alignment(horizontal='right', vertical='center')
+        if row_idx == max_row:
+            for cell in ws[row_idx]:
+                cell.fill = fill_gral
+                cell.font = font_total
+    anchos = {'A': 35, 'B': 18, 'C': 22, 'D': 18, 'E': 22, 'F': 22, 'G': 22, 'H': 18}
+    for col, ancho in anchos.items():
+        ws.column_dimensions[col].width = ancho
+    ws.freeze_panes = 'A2'
+
+def aplicar_formato_asiento(ws):
+    fill_header = PatternFill(start_color="F4B183", end_color="F4B183", fill_type="solid")
+    fill_gral = PatternFill(start_color="92D050", end_color="92D050", fill_type="solid")
+    font_header = Font(name='Calibri', bold=True, size=11, color="000000")
+    font_normal = Font(name='Calibri', size=10)
+    font_total = Font(name='Calibri', bold=True, size=10)
+    thin_border = Border(left=Side(style='thin'), right=Side(style='thin'), top=Side(style='thin'), bottom=Side(style='thin'))
+    for cell in ws[1]:
+        cell.fill = fill_header
+        cell.font = font_header
+        cell.alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
+        cell.border = thin_border
+    max_row = ws.max_row
+    for row_idx in range(2, max_row + 1):
+        for cell in ws[row_idx]:
+            cell.font = font_normal
+            cell.border = thin_border
+            cell.alignment = Alignment(vertical='center')
+            if cell.column in [2, 4, 5]:
+                cell.number_format = '#,##0.00'
+                cell.alignment = Alignment(horizontal='right', vertical='center')
+            elif cell.column in [3, 6]:
+                cell.alignment = Alignment(horizontal='center', vertical='center')
+        if row_idx == max_row:
+            for cell in ws[row_idx]:
+                cell.fill = fill_gral
+                cell.font = font_total
+    anchos = {'A': 45, 'B': 18, 'C': 20, 'D': 18, 'E': 18, 'F': 15}
+    for col, ancho in anchos.items():
+        ws.column_dimensions[col].width = ancho
+    ws.freeze_panes = 'A2'
+
+if uploaded_file:
+    st.info(f"Archivo cargado: **{uploaded_file.name}**")
     
-    errores = []
-    advertencias = []
-    dataframes = {}
-    
-    for hoja, (tabla, col_id) in hojas_map.items():
-        if hoja in xls.sheet_names:
-            df = pd.read_excel(xls, sheet_name=hoja)
-            df.columns = df.columns.str.strip()
-            
-            if isinstance(col_id, list):
-                cols_existentes = [c for c in col_id if c in df.columns]
-                if len(cols_existentes) == len(col_id):
-                    duplicados_internos = df[df.duplicated(subset=cols_existentes, keep=False)]
-                else:
-                    continue
-            else:
-                if col_id in df.columns:
-                    duplicados_internos = df[df.duplicated(subset=[col_id], keep=False)]
-                else:
-                    continue
-            
-            if not duplicados_internos.empty:
-                errores.append(f"Hoja '{hoja}': Se detectaron registros duplicados internamente")
-                continue
-            
-            if engine is not None:
-                try:
-                    if tabla == "pedidos_reclamos":
-                        query = f"SELECT [Número de pedido], Razon, Monto FROM dbo.{tabla}"
-                        df_bd = pd.read_sql(query, con=engine)
-                        
-                        df['llave'] = df['Número de pedido'].astype(str) + '|' + df['Razon'].astype(str) + '|' + df['Monto'].astype(str)
-                        df_bd['llave'] = df_bd['Número de pedido'].astype(str) + '|' + df_bd['Razon'].astype(str) + '|' + df_bd['Monto'].astype(str)
-                        
-                        existentes = df[df['llave'].isin(df_bd['llave'])]
-                        nuevos = df[~df['llave'].isin(df_bd['llave'])]
-                        df = df.drop(columns=['llave'])
-                    else:
-                        query = f"SELECT [Número de pedido] FROM dbo.{tabla}"
-                        df_bd = pd.read_sql(query, con=engine)
-                        
-                        existentes = df[df[col_id].isin(df_bd[col_id])]
-                        nuevos = df[~df[col_id].isin(df_bd[col_id])]
+    if st.button("Procesar y Generar Excel", use_container_width=True, type="primary"):
+        with st.spinner("Procesando datos..."):
+            try:
+                df_completo = pd.read_excel(uploaded_file, sheet_name="Detalle", header=1)
+                df_completo.columns = df_completo.columns.str.strip()
+                
+                columnas_necesarias = [
+                    "Fecha de creación orden", "ID de la órden", "Nombre de la tienda",
+                    "Estado de la órden", "Tipo de transacción",
+                    "Ventas base por Uso y alquiler de plataforma Rappi (informativo)",
+                    "Compensaciones", "Costo Canceladas",
+                    "Uso y alquiler de plataforma Rappi", "Valor Ajustes Manuales"
+                ]
+                
+                columnas_existentes = [col for col in columnas_necesarias if col in df_completo.columns]
+                df_filtrado = df_completo[columnas_existentes].copy()
+                
+                resumen = df_filtrado.groupby("Nombre de la tienda").agg({
+                    "Ventas base por Uso y alquiler de plataforma Rappi (informativo)": "sum",
+                    "Valor Ajustes Manuales": "sum",
+                    "Uso y alquiler de plataforma Rappi": "sum",
+                    "Compensaciones": "sum",
+                    "Costo Canceladas": "sum"
+                }).reset_index()
+                
+                resumen["IGV Comisión (18%)"] = resumen["Uso y alquiler de plataforma Rappi"] * 0.18
+                resumen["Total"] = (
+                    resumen["Ventas base por Uso y alquiler de plataforma Rappi (informativo)"] +
+                    resumen["Valor Ajustes Manuales"] +
+                    resumen["Uso y alquiler de plataforma Rappi"] +
+                    resumen["IGV Comisión (18%)"] +
+                    resumen["Compensaciones"] +
+                    resumen["Costo Canceladas"]
+                )
+                
+                resumen.columns = [
+                    "Nombre de la tienda", "Suma de VENTAS", "Suma de Valor Ajustes Manuales",
+                    "Suma de Comisión", "Suma de Compensaciones", "Suma de Costo Canceladas",
+                    "Suma de IVA Comisión (18%)", "Total"
+                ]
+                
+                cols_order = ["Nombre de la tienda", "Suma de VENTAS", "Suma de Valor Ajustes Manuales", 
+                             "Suma de Comisión", "Suma de IVA Comisión (18%)", 
+                             "Suma de Compensaciones", "Suma de Costo Canceladas", "Total"]
+                resumen = resumen[cols_order]
+                
+                for col in resumen.columns[1:]:
+                    resumen[col] = resumen[col].round(2)
+                
+                fila_total = resumen.iloc[:, 1:].sum()
+                fila_total["Nombre de la tienda"] = "TOTAL GENERAL"
+                resumen = pd.concat([resumen, pd.DataFrame([fila_total])], ignore_index=True)
+                
+                asiento = pd.DataFrame()
+                asiento["Tiendas"] = resumen["Nombre de la tienda"].copy()
+                asiento["Suma de Comision"] = resumen["Suma de Comisión"].copy()
+                asiento["Suma de Descuento por inversión de Rappi a aplicar sobre Uso y alquiler de plataforma Rappi DAR"] = "-"
+                asiento["Comision_Abs_1"] = resumen["Suma de Comisión"].abs()
+                asiento["Comision_Abs_2"] = resumen["Suma de Comisión"].abs()
+                asiento["Code"] = asiento["Tiendas"].apply(obtener_codigo_tienda)
+                
+                asiento["Suma de Comision"] = asiento["Suma de Comision"].round(2)
+                asiento["Comision_Abs_1"] = asiento["Comision_Abs_1"].round(2)
+                asiento["Comision_Abs_2"] = asiento["Comision_Abs_2"].round(2)
+                
+                excel_buffer = io.BytesIO()
+                
+                with pd.ExcelWriter(excel_buffer, engine='openpyxl') as writer:
+                    df_filtrado.to_excel(writer, index=False, sheet_name='Detalle')
+                    resumen.to_excel(writer, index=False, sheet_name='Resumen')
+                    asiento.to_excel(writer, index=False, sheet_name='Asiento')
                     
-                    if len(existentes) > 0:
-                        advertencias.append(f"'{hoja}': {len(existentes)} registros ya existen en la base de datos (se omitirán)")
-                    
-                    dataframes[tabla] = nuevos
-                except Exception as e:
-                    dataframes[tabla] = df
-            else:
-                dataframes[tabla] = df
-    
-    if errores:
-        return False, errores, advertencias, {}
-    
-    return True, errores, advertencias, dataframes
-
-# ==========================================
-# CARGA A BASE DE DATOS
-# ==========================================
-def cargar_a_bd(dataframes, engine):
-    resultados = {}
-    for nombre_tabla, df in dataframes.items():
-        if df.empty:
-            resultados[nombre_tabla] = {"status": "warning", "msg": "No hay registros nuevos para procesar"}
-            continue
-            
-        try:
-            if nombre_tabla == "pedidos_reclamos":
-                query = f"SELECT [Número de pedido], Razon, Monto FROM dbo.{nombre_tabla}"
-                df_existentes = pd.read_sql(query, con=engine)
+                    aplicar_formato_detalle(writer.sheets['Detalle'])
+                    aplicar_formato_resumen(writer.sheets['Resumen'])
+                    aplicar_formato_asiento(writer.sheets['Asiento'])
                 
-                df['llave'] = df['Número de pedido'].astype(str) + '|' + df['Razon'].astype(str) + '|' + df['Monto'].astype(str)
-                df_existentes['llave'] = df_existentes['Número de pedido'].astype(str) + '|' + df_existentes['Razon'].astype(str) + '|' + df_existentes['Monto'].astype(str)
+                st.success(f"✅ Archivo procesado. {len(df_filtrado)} registros en Detalle, {len(resumen)-1} tiendas en Resumen y Asiento.")
                 
-                df_nuevos = df[~df['llave'].isin(df_existentes['llave'])].drop(columns=['llave'])
-            else:
-                query = f"SELECT [Número de pedido] FROM dbo.{nombre_tabla}"
-                df_existentes = pd.read_sql(query, con=engine)
-                df_nuevos = df[~df['Número de pedido'].isin(df_existentes['Número de pedido'])]
-            
-            total_nuevos = len(df_nuevos)
-            
-            if total_nuevos > 0:
-                with engine.begin() as conn:
-                    df_nuevos.to_sql(nombre_tabla, con=conn, if_exists='append', index=False, method='multi')
-                resultados[nombre_tabla] = {"status": "success", "nuevos": total_nuevos}
-            else:
-                resultados[nombre_tabla] = {"status": "warning", "msg": "Todos los registros ya se encuentran en la base de datos"}
+                st.download_button(
+                    label="⬇️ Descargar Excel con Detalle, Resumen y Asiento",
+                    data=excel_buffer.getvalue(),
+                    file_name="rappi_asientos_contables.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                )
                 
-        except Exception as e:
-            resultados[nombre_tabla] = {"status": "error", "msg": str(e)}
-    
-    return resultados
-
-# ==========================================
-# GENERAR TABLA DINÁMICA DE RESUMEN
-# ==========================================
-def generar_tabla_dinamica(dataframes):
-    df_objetivo = None
-    for nombre_tabla, df in dataframes.items():
-        if "Nombre de la tienda" in df.columns:
-            df_objetivo = df.copy()
-            break
-    
-    if df_objetivo is None or df_objetivo.empty:
-        return None
-
-    df_objetivo['Código Tienda'] = df_objetivo['Nombre de la tienda'].apply(obtener_codigo_tienda)
-
-    columnas_a_sumar = [
-        "Ventas base por Uso y alquiler de plataforma Rappi (informativo)",
-        "Compensacion",
-        "Costo Cancelada",
-        "Uso y alquiler de plataforma Rappi",
-        "Valor Ajustes Manuales"
-    ]
-    
-    columnas_existentes = [col for col in columnas_a_sumar if col in df_objetivo.columns]
-
-    tabla = df_objetivo.groupby(['Código Tienda', 'Nombre de la tienda'])[columnas_existentes].sum().reset_index()
-
-    fila_total = tabla[columnas_existentes].sum()
-    fila_total['Código Tienda'] = 'TOTAL'
-    fila_total['Nombre de la tienda'] = 'GENERAL'
-    
-    cols_order = ['Código Tienda', 'Nombre de la tienda'] + columnas_existentes
-    fila_total = fila_total[cols_order]
-    
-    tabla = pd.concat([tabla, pd.DataFrame([fila_total])], ignore_index=True)
-
-    for col in columnas_existentes:
-        tabla[col] = tabla[col].round(2)
-
-    return tabla
-
-# ==========================================
-# INTERFAZ PRINCIPAL
-# ==========================================
-def main():
-    st.title("Pedidos Ya | Carga de Informes")
-    st.markdown("Seleccione el archivo Excel semanal. El sistema validará automáticamente la existencia de duplicados.")
-    
-    uploaded_file = st.file_uploader("Seleccionar archivo Excel", type=['xls', 'xlsx'])
-    
-    if uploaded_file:
-        st.info(f"Archivo seleccionado: **{uploaded_file.name}**")
-        
-        try:
-            engine = get_engine()
-        except Exception as e:
-            st.error(f"Error de conexión a la base de datos: {e}")
-            engine = None
-        
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            if st.button("Validar archivo", use_container_width=True):
-                with st.spinner("Ejecutando validación..."):
-                    try:
-                        xls = pd.ExcelFile(uploaded_file, engine='openpyxl')
-                        es_valido, errores, advertencias, dataframes = validar_archivo_sin_duplicados(xls, engine)
-                        
-                        st.session_state['validacion_ok'] = es_valido
-                        st.session_state['errores'] = errores
-                        st.session_state['advertencias'] = advertencias
-                        st.session_state['dataframes'] = dataframes
-                        
-                        if not es_valido:
-                            st.error("El archivo contiene registros duplicados internamente:")
-                            for msg in errores:
-                                st.markdown(f"- {msg}")
-                        elif advertencias:
-                            st.warning(f"Validación completada con observaciones ({len(advertencias)} hojas con registros existentes):")
-                            for msg in advertencias:
-                                st.markdown(f"- {msg}")
-                            total_nuevos = sum(len(df) for df in dataframes.values()) if dataframes else 0
-                            st.info(f"Total de registros nuevos a insertar: **{total_nuevos}**")
-                        else:
-                            st.success("Archivo válido. Todos los registros son nuevos.")
-                            total_registros = sum(len(df) for df in dataframes.values()) if dataframes else 0
-                            st.info(f"Total de registros a insertar: **{total_registros}**")
-                    except Exception as e:
-                        st.error(f"Error durante la validación: {e}")
-        
-        with col2:
-            if st.button("Cargar datos", use_container_width=True, type="primary"):
-                if engine is None:
-                    st.error("No se estableció conexión con la base de datos")
-                    st.stop()
-                
-                if 'validacion_ok' not in st.session_state:
-                    st.warning("Por favor, valide el archivo antes de proceder con la carga.")
-                    st.stop()
-                
-                if not st.session_state['validacion_ok']:
-                    st.error("No es posible cargar el archivo: se detectaron duplicados internos.")
-                    st.stop()
-                
-                with st.spinner("Procesando carga de datos y generando resumen..."):
-                    try:
-                        dataframes = st.session_state.get('dataframes', {})
-                        
-                        if not dataframes or all(df.empty for df in dataframes.values()):
-                            st.warning("No hay registros nuevos disponibles para insertar.")
-                            st.stop()
-                        
-                        resultados = cargar_a_bd(dataframes, engine)
-                        
-                        st.divider()
-                        st.subheader("Resumen de Ejecución")
-                        
-                        for tabla, resultado in resultados.items():
-                            if resultado["status"] == "success":
-                                st.success(f"**{tabla}**: {resultado['nuevos']} registros insertados correctamente.")
-                            elif resultado["status"] == "warning":
-                                st.warning(f"**{tabla}**: {resultado.get('msg', 'Sin cambios')}")
-                            else:
-                                st.error(f"**{tabla}**: {resultado['msg']}")
-                        
-                        st.success("Proceso de carga finalizado correctamente.")
-                        
-                        # ==========================================
-                        # NUEVO: Generar y mostrar Tabla Dinámica
-                        # ==========================================
-                        tabla_resumen = generar_tabla_dinamica(dataframes)
-                        
-                        if tabla_resumen is not None:
-                            st.divider()
-                            st.subheader("📊 Tabla Dinámica de Resumen por Tienda")
-                            st.dataframe(tabla_resumen, use_container_width=True, hide_index=True)
-                            
-                            excel_buffer = io.BytesIO()
-                            with pd.ExcelWriter(excel_buffer, engine='openpyxl') as writer:
-                                tabla_resumen.to_excel(writer, index=False, sheet_name='Resumen')
-                            
-                            st.download_button(
-                                label="⬇️ Descargar Resumen en Excel",
-                                data=excel_buffer.getvalue(),
-                                file_name="resumen_notas_credito.xlsx",
-                                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                            )
-                        
-                        st.session_state.pop('validacion_ok', None)
-                        st.session_state.pop('dataframes', None)
-                        
-                    except Exception as e:
-                        st.error(f"Error crítico durante la carga: {e}")
-
-if __name__ == "__main__":
-    main()
+            except Exception as e:
+                st.error(f"Error: {e}")
+                import traceback
+                st.code(traceback.format_exc())
