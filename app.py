@@ -31,6 +31,8 @@ MAPEO_CODIGOS = {
     "Fridays - Mall Aventura Porongoche": "0000000023",
     "Fridays Mall Aventura Porongoche": "0000000023",
     "Fridays El Polo": "0000000027",
+    "Fridays - Cusco": "0000000025",
+    "Fridays Piura - Real Plaza": "0000000024",
     "Smash Burger by Fridays Óvalo Gutiérrez": "0000000001",
     "Smash Burger by Fridays Ovalo Gutierrez": "0000000001",
     "Smash Burger by Fridays Ovalo Monitor": "0000000019",
@@ -52,6 +54,7 @@ MAPEO_CODIGOS = {
     "Smash Burger by Fridays Arequipa": "0000000006",
     "Smash Burger by Fridays Primavera": "0000000009",
     "Smash Burger by Fridays El Polo": "0000000027",
+    "Smash Burger by Fridays Cusco": "0000000025"
 }
 
 def obtener_codigo_tienda(nombre_tienda):
