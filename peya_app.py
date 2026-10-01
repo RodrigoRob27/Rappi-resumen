@@ -8,9 +8,8 @@ from openpyxl.utils import get_column_letter
 
 st.set_page_config(page_title="Filtrado Peya - Detalle y Resumen", layout="centered")
 st.title(" Filtrado de Datos Peya (Pedidos Ya)")
-st.markdown("Sube el archivo original de Peya. El sistema generará las hojas 'Detalle' y 'Resumen' con códigos de tienda inteligentes.")
 
-uploaded_file = st.file_uploader("Seleccionar archivo Excel de Peya", type=['xlsx', 'xls'])
+uploaded_file = st.file_uploader(" Selecciona el reporte de Peya", type=['xlsx', 'xls'])
 
 # ==========================================
 # MAPEO DE CÓDIGOS DE TIENDAS (PEYA)
@@ -80,12 +79,10 @@ def obtener_codigo_tienda(nombre_tienda):
     
     nombre_normalizado = normalizar_texto(nombre_tienda)
     
-    # 1. Búsqueda exacta normalizada
     for nombre_mapeado, codigo in MAPEO_CODIGOS_PEYA.items():
         if normalizar_texto(nombre_mapeado) == nombre_normalizado:
             return codigo
             
-    # 2. Búsqueda por contención
     for nombre_mapeado, codigo in MAPEO_CODIGOS_PEYA.items():
         nombre_mapeado_norm = normalizar_texto(nombre_mapeado)
         if nombre_normalizado in nombre_mapeado_norm or nombre_mapeado_norm in nombre_normalizado:
@@ -149,16 +146,14 @@ def agregar_tabla_a_hoja(writer, sheet_name, start_row, titulo, df):
     last_col_letter = get_column_letter(last_col)
     worksheet.auto_filter.ref = f"A{header_row}:{last_col_letter}{last_row_excel}"
     
-    # 🌟 AUTO-AJUSTE DE ANCHO DE COLUMNAS
+    # AUTO-AJUSTE DE ANCHO DE COLUMNAS
     for col_idx, col_name in enumerate(df.columns, start=1):
-        # Calcular la longitud máxima entre el encabezado y los valores
         max_length = len(str(col_name))
         for row in df[col_name]:
             cell_length = len(str(row))
             if cell_length > max_length:
                 max_length = cell_length
         
-        # Ajustar el ancho (multiplicador 1.2 para dar espacio extra, con un máximo de 50)
         adjusted_width = min(max_length * 1.2 + 2, 50)
         col_letter = get_column_letter(col_idx)
         worksheet.column_dimensions[col_letter].width = adjusted_width
@@ -186,7 +181,7 @@ if uploaded_file:
                             dfs_filtrados[nombre_hoja] = df_hoja[columnas_existentes].copy()
                 
                 if not dfs_filtrados:
-                    st.error("❌ No se pudo extraer información de ninguna hoja.")
+                    st.error(" No se pudo extraer información de ninguna hoja.")
                     st.stop()
 
                 output = io.BytesIO()
@@ -213,7 +208,6 @@ if uploaded_file:
                         
                         df_agrupado = df_resumen_data.groupby('Sucursal', as_index=False).sum()
                         
-                        # 🌟 AGREGAR COLUMNA DE CÓDIGO TIENDA AL FINAL
                         df_agrupado['Código Tienda'] = df_agrupado['Sucursal'].apply(obtener_codigo_tienda)
                         
                         sin_codigo_en_hoja = df_agrupado[df_agrupado['Código Tienda'] == 'SIN_CODIGO']['Sucursal'].unique()
@@ -234,7 +228,7 @@ if uploaded_file:
                 
                 st.success("✅ ¡Excel generado exitosamente con 'Detalle' y 'Resumen'!")
                 st.download_button(
-                    label="📥 Descargar Excel Peya",
+                    label=" Descargar Excel Peya",
                     data=output,
                     file_name="Peya_Detalle_y_Resumen.xlsx",
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
