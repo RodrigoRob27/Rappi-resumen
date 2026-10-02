@@ -7,9 +7,9 @@ from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
 
 st.set_page_config(page_title="Filtrado Peya - Detalle y Resumen", layout="centered")
-st.title(" Filtrado de Datos Peya (Pedidos Ya)")
+st.title("Filtrado de Datos Peya (Pedidos Ya)")
 
-uploaded_file = st.file_uploader(" Selecciona el reporte de Peya", type=['xlsx', 'xls'])
+uploaded_files = st.file_uploader("Selecciona los archivos", type=['xlsx', 'xls'], accept_multiple_files=True)
 
 # ==========================================
 # MAPEO DE CÓDIGOS DE TIENDAS (PEYA)
@@ -63,6 +63,7 @@ MAPEO_CODIGOS_PEYA = {
     "Smash Burger By Fridays - Ó... Gutiérrez": "0000000001",
     "Fridays Mall Plaza Comas - B2c": "0000000016",
     "Fridays El Polo - B2c": "0000000027",
+    "Fridays - Cusco": "0000000025",
 }
 
 def normalizar_texto(texto):
@@ -163,27 +164,40 @@ def agregar_tabla_a_hoja(writer, sheet_name, start_row, titulo, df):
 # ==========================================
 # PROCESAMIENTO PRINCIPAL
 # ==========================================
-if uploaded_file:
-    st.info(f"Archivo cargado: **{uploaded_file.name}**")
+if uploaded_files:
+    st.info(f"Archivos cargados: **{len(uploaded_files)}**")
+    for f in uploaded_files:
+        st.text(f"• {f.name}")
     
-    if st.button(" Generar Excel (Detalle y Resumen)", use_container_width=True, type="primary"):
-        with st.spinner("Procesando y generando hojas..."):
+    if st.button("Generar Excel (Detalle y Resumen)", use_container_width=True, type="primary"):
+        with st.spinner("Procesando y combinando todos los archivos..."):
             try:
-                excel_file = pd.ExcelFile(uploaded_file)
-                hojas_disponibles = excel_file.sheet_names
+                # Diccionario para acumular datos de todas las hojas de todos los archivos
+                dfs_acumulados = {nombre_hoja: [] for nombre_hoja in COLUMNAS_POR_HOJA.keys()}
                 
+                # 1. Leer y acumular datos de TODOS los archivos
+                for uploaded_file in uploaded_files:
+                    excel_file = pd.ExcelFile(uploaded_file)
+                    hojas_disponibles = excel_file.sheet_names
+                    
+                    for nombre_hoja, columnas_necesarias in COLUMNAS_POR_HOJA.items():
+                        if nombre_hoja in hojas_disponibles:
+                            df_hoja = pd.read_excel(excel_file, sheet_name=nombre_hoja)
+                            columnas_existentes = [col for col in columnas_necesarias if col in df_hoja.columns]
+                            if columnas_existentes:
+                                dfs_acumulados[nombre_hoja].append(df_hoja[columnas_existentes])
+                
+                # 2. Concatenar todos los DataFrames de cada hoja
                 dfs_filtrados = {}
-                for nombre_hoja, columnas_necesarias in COLUMNAS_POR_HOJA.items():
-                    if nombre_hoja in hojas_disponibles:
-                        df_hoja = pd.read_excel(excel_file, sheet_name=nombre_hoja)
-                        columnas_existentes = [col for col in columnas_necesarias if col in df_hoja.columns]
-                        if columnas_existentes:
-                            dfs_filtrados[nombre_hoja] = df_hoja[columnas_existentes].copy()
+                for nombre_hoja, lista_dfs in dfs_acumulados.items():
+                    if lista_dfs:
+                        dfs_filtrados[nombre_hoja] = pd.concat(lista_dfs, ignore_index=True)
                 
                 if not dfs_filtrados:
-                    st.error(" No se pudo extraer información de ninguna hoja.")
+                    st.error("No se pudo extraer información de ningún archivo.")
                     st.stop()
 
+                # 3. Generar el Excel combinado
                 output = io.BytesIO()
                 with pd.ExcelWriter(output, engine='openpyxl') as writer:
                     
@@ -217,18 +231,18 @@ if uploaded_file:
 
                     # --- PANEL DE DIAGNÓSTICO ---
                     if sucursales_sin_codigo:
-                        st.warning(f"⚠️ Se encontraron {len(sucursales_sin_codigo)} nombres de sucursal que no coinciden con el diccionario:")
+                        st.warning(f"Se encontraron {len(sucursales_sin_codigo)} nombres de sucursal que no coinciden con el diccionario:")
                         for s in list(sucursales_sin_codigo)[:10]:
                             st.text(f"• '{s}'")
-                        st.info("💡 Si ves nombres aquí, cópialos y pégalos para que los agregue al diccionario.")
+                        st.info("Si ves nombres aquí, cópialos y pégalos para que los agregue al diccionario.")
                     else:
-                        st.success("✅ ¡Todas las sucursales fueron identificadas correctamente con su código!")
+                        st.success("¡Todas las sucursales fueron identificadas correctamente con su código!")
 
                 output.seek(0)
                 
-                st.success("✅ ¡Excel generado exitosamente con 'Detalle' y 'Resumen'!")
+                st.success(f"¡Excel generado exitosamente combinando {len(uploaded_files)} archivos!")
                 st.download_button(
-                    label=" Descargar Excel Peya",
+                    label="Descargar archivo",
                     data=output,
                     file_name="Peya_Detalle_y_Resumen.xlsx",
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -236,5 +250,5 @@ if uploaded_file:
                 )
                 
             except Exception as e:
-                st.error(f"❌ Error durante el procesamiento: {e}")
+                st.error(f"Error durante el procesamiento: {e}")
                 st.exception(e)
