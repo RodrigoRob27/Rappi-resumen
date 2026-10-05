@@ -56,8 +56,7 @@ MAPEO_CODIGOS = {
     "Smash Burger by Fridays Arequipa": "0000000006",
     "Smash Burger by Fridays Primavera": "0000000009",
     "Smash Burger by Fridays El Polo": "0000000027",
-    "Smash Burger by Fridays Cusco": "0000000025"
-
+    "Smash Burger by Fridays Cusco": "0000000025",
 }
 
 def obtener_codigo_tienda(nombre_tienda):
