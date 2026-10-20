@@ -29,6 +29,7 @@ MAPEO_CODIGOS_PEYA = {
     "Fridays Dk La Molina": "0000000018",
     "Fridays Comas": "0000000016",
     "Fridays Puruchuco": "0000000014",
+    "Fridays Real Plaza Primavera": "0000000022",
     "Fridays Mall Aventura San ... Lurigancho": "0000000020",
     "Smash Burger By Fridays Óvalo Monitor ,": "0000000019",
     "Smash Burger By Fridays Ma... Lurigancho": "0000000020",
