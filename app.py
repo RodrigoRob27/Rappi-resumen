@@ -27,6 +27,7 @@ MAPEO_CODIGOS = {
     "Fridays DK La Molina": "0000000018",
     "Fridays Dk La Molina": "0000000018",
     "Fridays Puruchuco": "0000000014",
+    "Fridays Real Plaza Primavera": "0000000022",
     "Fridays San Juan de Lurigancho": "0000000020",
     "Fridays Piura": "0000000024",
     "Fridays - Real Plaza Arequipa": "0000000006",
