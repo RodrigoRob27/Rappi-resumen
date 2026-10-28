@@ -29,7 +29,6 @@ MAPEO_CODIGOS_PEYA = {
     "Fridays Dk La Molina": "0000000018",
     "Fridays Comas": "0000000016",
     "Fridays Puruchuco": "0000000014",
-    "Fridays Real Plaza Primavera": "0000000022",
     "Fridays Mall Aventura San ... Lurigancho": "0000000020",
     "Smash Burger By Fridays Óvalo Monitor ,": "0000000019",
     "Smash Burger By Fridays Ma... Lurigancho": "0000000020",
@@ -295,21 +294,30 @@ if uploaded_files:
                         df_concat = pd.concat(lista_dfs, ignore_index=True)
                         
                         if nombre_hoja == "Lista de ordenes" and "Fecha de pedido" in df_concat.columns:
-                            df_concat["Fecha de pedido"] = pd.to_datetime(df_concat["Fecha de pedido"], errors='coerce').dt.date
+                            # 🌟 CAMBIO 1: dayfirst=True para formato DD/MM/YYYY
+                            df_concat["Fecha de pedido"] = pd.to_datetime(df_concat["Fecha de pedido"], errors='coerce', dayfirst=True).dt.date
                             fechas_validas = df_concat["Fecha de pedido"].dropna()
                             if not fechas_validas.empty:
                                 if fecha_min_global is None or fechas_validas.min() < fecha_min_global:
                                     fecha_min_global = fechas_validas.min()
                                 if fecha_max_global is None or fechas_validas.max() > fecha_max_global:
                                     fecha_max_global = fechas_validas.max()
+                            # 🌟 CAMBIO 2: Rellenar vacíos con la fecha máxima para que no se pierdan en el SUMIFS
+                            if fecha_max_global is not None:
+                                df_concat["Fecha de pedido"] = df_concat["Fecha de pedido"].fillna(fecha_max_global)
+                                
                         elif nombre_hoja == "Cargos por cancelaciones" and "Fecha del pedido" in df_concat.columns:
-                            df_concat["Fecha del pedido"] = pd.to_datetime(df_concat["Fecha del pedido"], errors='coerce').dt.date
+                            # 🌟 CAMBIO 1: dayfirst=True para formato DD/MM/YYYY
+                            df_concat["Fecha del pedido"] = pd.to_datetime(df_concat["Fecha del pedido"], errors='coerce', dayfirst=True).dt.date
                             fechas_validas = df_concat["Fecha del pedido"].dropna()
                             if not fechas_validas.empty:
                                 if fecha_min_global is None or fechas_validas.min() < fecha_min_global:
                                     fecha_min_global = fechas_validas.min()
                                 if fecha_max_global is None or fechas_validas.max() > fecha_max_global:
                                     fecha_max_global = fechas_validas.max()
+                            # 🌟 CAMBIO 2: Rellenar vacíos con la fecha máxima para que no se pierdan en el SUMIFS
+                            if fecha_max_global is not None:
+                                df_concat["Fecha del pedido"] = df_concat["Fecha del pedido"].fillna(fecha_max_global)
                         
                         dfs_filtrados[nombre_hoja] = df_concat
                 
